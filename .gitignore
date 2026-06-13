@@ -8,3 +8,23 @@ wheels/
 
 # Virtual environments
 .venv
+
+# Terraform — never commit state or secret tfvars.
+# Local Terraform state and working dirs
+.terraform/
+.terraform.lock.hcl.bak
+*.tfstate
+*.tfstate.*
+
+# Crash logs
+crash.log
+crash.*.log
+
+# Variable files that may contain secrets (commit *.tfvars.example instead)
+*.tfvars
+*.tfvars.json
+!*.tfvars.example
+
+# Binary plan output
+tfplan
+*.tfplan
