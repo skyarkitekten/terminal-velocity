@@ -1,0 +1,28 @@
+name: Infra CI
+
+# Pull-request gate: format, validate, and plan the infra stack against dev.
+# Plan-only — never applies from a PR. The plan is the review artifact.
+
+on:
+    pull_request:
+        paths:
+            - "infra/**"
+            - ".github/workflows/infra-ci.yml"
+            - ".github/workflows/terraform.yml"
+
+permissions:
+    id-token: write
+    contents: read
+
+concurrency:
+    group: infra-ci-${{ github.ref }}
+    cancel-in-progress: true
+
+jobs:
+    plan-dev:
+        name: Plan (dev)
+        uses: ./.github/workflows/terraform.yml
+        with:
+            environment: dev
+            apply: false
+        secrets: inherit
