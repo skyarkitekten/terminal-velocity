@@ -1,0 +1,96 @@
+name: Terraform
+
+# Reusable Terraform plan/apply for a single environment.
+#
+# Auth is keyless: azure/login exchanges the workflow's OIDC token for Azure
+# credentials, and the azurerm backend uses the same token (ARM_USE_OIDC).
+# Callers pass `secrets: inherit` so environment-scoped secrets resolve here.
+
+on:
+    workflow_call:
+        inputs:
+            environment:
+                description: Target GitHub Environment (also the tfstate key prefix).
+                required: true
+                type: string
+            apply:
+                description: Apply the plan. When false, plan only (use for PRs).
+                required: false
+                default: false
+                type: boolean
+            terraform-version:
+                description: Terraform version to install.
+                required: false
+                default: "1.9.8"
+                type: string
+
+permissions:
+    id-token: write # required for OIDC federated login to Azure
+    contents: read
+
+jobs:
+    terraform:
+        name: terraform (${{ inputs.environment }})
+        runs-on: ubuntu-latest
+        environment: ${{ inputs.environment }}
+        defaults:
+            run:
+                working-directory: infra
+        env:
+            # Backend + provider auth (keyless via OIDC). These are non-secret IDs,
+            # so they live in Actions *variables* scoped to the environment.
+            ARM_USE_OIDC: "true"
+            ARM_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+            ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+            ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+            # Feed the same coordinates to the stack's provider variables.
+            TF_VAR_subscription_id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+            TF_VAR_tenant_id: ${{ vars.AZURE_TENANT_ID }}
+            # Expose environment *secrets* to Terraform as TF_VAR_* here, e.g.:
+            # TF_VAR_db_admin_password: ${{ secrets.DB_ADMIN_PASSWORD }}
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v5
+
+            - name: Azure login (OIDC)
+              uses: azure/login@v3
+              with:
+                  client-id: ${{ vars.AZURE_CLIENT_ID }}
+                  tenant-id: ${{ vars.AZURE_TENANT_ID }}
+                  subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+            - name: Setup Terraform
+              uses: hashicorp/setup-terraform@v4
+              with:
+                  terraform_version: ${{ inputs.terraform-version }}
+
+            - name: Format check
+              run: terraform fmt -check -recursive
+
+            - name: Init
+              run: |
+                  terraform init -input=false \
+                    -backend-config="resource_group_name=${{ vars.TFSTATE_RESOURCE_GROUP }}" \
+                    -backend-config="storage_account_name=${{ vars.TFSTATE_STORAGE_ACCOUNT }}" \
+                    -backend-config="container_name=${{ vars.TFSTATE_CONTAINER || 'tfstate' }}" \
+                    -backend-config="key=${{ inputs.environment }}/terminal-velocity.tfstate"
+
+            - name: Resolve var-file
+              id: vars
+              run: |
+                  file="environments/${{ inputs.environment }}.tfvars"
+                  if [ -f "$file" ]; then
+                    echo "arg=-var-file=$file" >> "$GITHUB_OUTPUT"
+                  else
+                    echo "arg=" >> "$GITHUB_OUTPUT"
+                  fi
+
+            - name: Validate
+              run: terraform validate
+
+            - name: Plan
+              run: terraform plan -input=false -out=tfplan ${{ steps.vars.outputs.arg }}
+
+            - name: Apply
+              if: ${{ inputs.apply }}
+              run: terraform apply -input=false tfplan

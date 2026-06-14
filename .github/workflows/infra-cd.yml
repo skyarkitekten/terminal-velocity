@@ -1,0 +1,40 @@
+name: Infra CD
+
+# On merge to main: apply to dev, then promote to prod.
+# Promotion is gated by the `prod` GitHub Environment's required reviewers —
+# the deploy-prod job pauses for manual approval before it runs.
+
+on:
+    push:
+        branches: [main]
+        paths:
+            - "infra/**"
+            - ".github/workflows/infra-cd.yml"
+            - ".github/workflows/terraform.yml"
+    workflow_dispatch:
+
+permissions:
+    id-token: write
+    contents: read
+
+concurrency:
+    group: infra-cd
+    cancel-in-progress: false
+
+jobs:
+    deploy-dev:
+        name: Deploy (dev)
+        uses: ./.github/workflows/terraform.yml
+        with:
+            environment: dev
+            apply: true
+        secrets: inherit
+
+    deploy-prod:
+        name: Deploy (prod)
+        needs: deploy-dev
+        uses: ./.github/workflows/terraform.yml
+        with:
+            environment: prod
+            apply: true
+        secrets: inherit

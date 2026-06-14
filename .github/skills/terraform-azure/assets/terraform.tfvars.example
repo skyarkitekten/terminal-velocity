@@ -1,0 +1,15 @@
+# Example variable values. Copy to `terraform.tfvars` (gitignored) and fill in.
+# NEVER put secrets, connection strings, or credentials here — use Key Vault
+# references and OIDC / managed identity for authentication.
+
+# subscription_id = "00000000-0000-0000-0000-000000000000"
+# tenant_id       = "00000000-0000-0000-0000-000000000000"
+
+resource_group_name = "rg-terminal-velocity-dev"
+location            = "westeurope"
+
+tags = {
+  workload    = "terminal-velocity"
+  environment = "dev"
+  managed_by  = "terraform"
+}
