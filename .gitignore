@@ -24,6 +24,8 @@ crash.*.log
 *.tfvars
 *.tfvars.json
 !*.tfvars.example
+# Non-secret, declarative per-environment config is tracked on purpose.
+!infra/environments/*.tfvars
 
 # Binary plan output
 tfplan
