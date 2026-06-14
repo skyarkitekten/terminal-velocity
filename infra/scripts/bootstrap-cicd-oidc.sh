@@ -90,20 +90,30 @@ else
 fi
 [[ "${DRY_RUN:-false}" == "true" && -z "$APP_ID" ]] && APP_ID="<dry-run-app-id>"
 
-if [[ -z "$(az ad sp show --id "$APP_ID" --query id -o tsv 2>/dev/null)" ]]; then
-  log "Creating service principal for $APP_ID"
-  run az ad sp create --id "$APP_ID" >/dev/null
+if [[ "${DRY_RUN:-false}" == "true" && "$APP_ID" == "<dry-run-app-id>" ]]; then
+  log "Service principal lookup skipped (dry run with placeholder APP_ID)"
+  SP_OID="<dry-run-sp-oid>"
 else
-  log "Service principal exists for $APP_ID"
+  if [[ -z "$(az ad sp show --id "$APP_ID" --query id -o tsv 2>/dev/null || true)" ]]; then
+    log "Creating service principal for $APP_ID"
+    run az ad sp create --id "$APP_ID" >/dev/null
+  else
+    log "Service principal exists for $APP_ID"
+  fi
+  SP_OID="$(az ad sp show --id "$APP_ID" --query id -o tsv 2>/dev/null || true)"
+  [[ -z "$SP_OID" ]] && SP_OID="<dry-run-sp-oid>"
 fi
-SP_OID="$(az ad sp show --id "$APP_ID" --query id -o tsv 2>/dev/null || echo "<dry-run-sp-oid>")"
 
 # --- 2. Federated credentials per environment --------------------------------
 for env in $ENVIRONMENTS; do
   fic_name="gh-${env}"
   subject="repo:${REPO}:environment:${env}"
-  existing="$(az ad app federated-credential list --id "$APP_ID" \
-    --query "[?subject=='${subject}'].name | [0]" -o tsv 2>/dev/null || true)"
+  if [[ "${DRY_RUN:-false}" == "true" && "$APP_ID" == "<dry-run-app-id>" ]]; then
+    existing=""
+  else
+    existing="$(az ad app federated-credential list --id "$APP_ID" \
+      --query "[?subject=='${subject}'].name | [0]" -o tsv 2>/dev/null || true)"
+  fi
   if [[ -n "$existing" ]]; then
     log "Federated credential for env '$env' exists ($existing)"
   else
