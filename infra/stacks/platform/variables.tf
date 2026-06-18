@@ -36,3 +36,33 @@ variable "tags" {
   type        = map(string)
   description = "Tags applied to all resources. Must satisfy subscription policy (Owner, Purpose, BillingCode)."
 }
+
+variable "model_deployments" {
+  type = map(object({
+    name = string
+    model = object({
+      format  = string
+      name    = string
+      version = string
+    })
+    scale = object({
+      type     = string
+      capacity = number
+    })
+  }))
+  description = "Map of model deployments for the AI Foundry account."
+  default = {
+    "gpt-4.1-mini" = {
+      name = "gpt-4.1-mini"
+      model = {
+        format  = "OpenAI"
+        name    = "gpt-4.1-mini"
+        version = "2025-04-14"
+      }
+      scale = {
+        type     = "GlobalStandard"
+        capacity = 10
+      }
+    }
+  }
+}
