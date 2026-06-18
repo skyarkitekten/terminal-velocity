@@ -27,7 +27,7 @@ pull requests and automation.
 3. **Author the module.** Copy `assets/module-template/` (`main.tf`,
    `variables.tf`, `outputs.tf`, `versions.tf`) and `assets/providers.tf` at the
    stack root. Pin provider versions, type and describe every variable, and mark
-   secrets/outputs `sensitive`.
+   secrets/outputs `sensitive`. Use Azure Verified Modules where possible, but prefer simple custom code for clarity and control in this reference implementation. Keep modules focused on a single responsibility and composable.
 4. **Configure state.** Use `assets/backend.tf` with the remote `azurerm`
    backend; never commit `.tfstate`. Bootstrap the backend storage via
    `references/backend-setup.md`. Apply `assets/gitignore.snippet` and commit
