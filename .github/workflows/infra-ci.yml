@@ -26,3 +26,22 @@ jobs:
             environment: dev
             apply: false
         secrets: inherit
+
+    # Aggregate gate that reports a stable "Infra CI" check-run context for branch
+    # protection. The reusable-workflow job above surfaces as "Plan (dev) /
+    # terraform (dev)", which never matches the required "Infra CI" context, so
+    # this job provides it and fails unless the plan succeeded.
+    infra-ci:
+        name: Infra CI
+        needs: plan-dev
+        if: ${{ always() }}
+        runs-on: ubuntu-latest
+        steps:
+            - name: Verify plan succeeded
+              run: |
+                  result="${{ needs.plan-dev.result }}"
+                  echo "plan-dev result: $result"
+                  if [ "$result" != "success" ]; then
+                      echo "::error::Infra CI gate failed because plan-dev did not succeed (result: $result)."
+                      exit 1
+                  fi
