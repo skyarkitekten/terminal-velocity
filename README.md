@@ -4,7 +4,9 @@ Terminal Velocity is a reference implementation that applies GitOps principles t
 
 ## Philosophy
 
-GitOps uses Git as the single source of truth for the entire system: infrastructure, application code, configuration, and deployment processes. By using Git, we can leverage its powerful version control capabilities to track changes, collaborate with teams, and ensure that the desired state of the system is always defined in a clear and auditable way.
+GitOps uses Git as the single source of truth for the entire system: infrastructure, application code, configuration, and deployment processes. By using Git, we can leverage its powerful version control capabilities to track changes, collaborate with teams, and ensure that the desired state of the system is always defined in a clear and auditable way. See the [gitops documentation](./docs/gitops/00-philosophy.md) for more details.
+
+When building agentic applications, it is critical to maintain a product mindset and treat the system as one under constant development and improvement rather than a one-and-done project. This means prioritizing maintainability, observability, and extensibility from the start, and continuously iterating on the implementation based on feedback and changing requirements. Internal and external forces will cause agent performance and requirements to evolve, so the system must be designed to adapt and improve over time. This concept is referred to as "Hill Climbing" in the [feature notes](./docs/app/notes.md).
 
 ## Features
 

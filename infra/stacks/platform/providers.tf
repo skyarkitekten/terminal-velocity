@@ -3,8 +3,16 @@
 # literals, so the same stack targets any environment.
 
 provider "azurerm" {
-  features {}
+  features {
+    cognitive_account {
+      purge_soft_delete_on_destroy = true
+    }
+  }
 
   subscription_id = var.subscription_id
   tenant_id       = var.tenant_id
 }
+
+provider "azapi" {}
+
+provider "time" {}

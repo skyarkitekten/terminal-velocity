@@ -22,6 +22,14 @@ This is a byproduct of the reference implementation, showcasing how to optimize 
 
 ### Prerequisites
 
+#### Accounts and Permissions
+
+- **An active Azure subscription** with the Owner or Contributor + User Access Administrator roles at the subscription or resource group level (role assignments require elevated permission).
+- **Foundry access** enabled in your subscription. In some tenants you may need to accept terms or request quota for Azure OpenAI.
+- **Azure OpenAI quota** for the model you intend to deploy (e.g. gpt-4.1). Request this via the Azure portal under Quotas in Azure OpenAI Studio.
+
+#### Tools
+
 1. **Git:** Ensure you have Git installed on your machine to clone the repository and manage your contributions.
 2. **Docker:** Install Docker to run the agentic services in a containerized environment.
 3. **Terraform:** Install Terraform to manage infrastructure as code for deploying agentic services.

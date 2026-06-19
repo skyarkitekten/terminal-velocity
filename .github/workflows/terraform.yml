@@ -21,7 +21,7 @@ on:
             terraform-version:
                 description: Terraform version to install.
                 required: false
-                default: "1.9.8"
+                default: "1.12.2"
                 type: string
 
 permissions:
@@ -35,7 +35,7 @@ jobs:
         environment: ${{ inputs.environment }}
         defaults:
             run:
-                working-directory: infra
+                working-directory: infra/stacks/platform
         env:
             # Backend + provider auth (keyless via OIDC). These are non-secret IDs,
             # so they live in Actions *variables* scoped to the environment.
@@ -65,6 +65,8 @@ jobs:
                   terraform_version: ${{ inputs.terraform-version }}
 
             - name: Format check
+              # Cover the whole tree (modules + stacks), not just this stack.
+              working-directory: infra
               run: terraform fmt -check -recursive
 
             - name: Init
@@ -81,12 +83,22 @@ jobs:
                   file="environments/${{ inputs.environment }}.tfvars"
                   if [ -f "$file" ]; then
                     echo "arg=-var-file=$file" >> "$GITHUB_OUTPUT"
+                    echo "file=$file" >> "$GITHUB_OUTPUT"
                   else
                     echo "arg=" >> "$GITHUB_OUTPUT"
+                    echo "file=" >> "$GITHUB_OUTPUT"
                   fi
+
+            - name: Stage validate inputs
+              if: ${{ steps.vars.outputs.file != '' }}
+              run: cp "${{ steps.vars.outputs.file }}" terraform.tfvars
 
             - name: Validate
               run: terraform validate
+
+            - name: Clean staged validate inputs
+              if: ${{ always() }}
+              run: rm -f terraform.tfvars
 
             - name: Plan
               run: terraform plan -input=false -out=tfplan ${{ steps.vars.outputs.arg }}

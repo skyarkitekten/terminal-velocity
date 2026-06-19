@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# foundry-agent-region-check.sh
+# foundry-region-check.sh
 #
 # Determines which Azure regions can host Microsoft Foundry (the AIServices
 # account) AND the Foundry Agent Service, for the CURRENT subscription.
@@ -18,8 +18,8 @@
 #   1. AIServices account kind is creatable (Foundry resource)  -> via SKU list
 #
 # Requires: az CLI (logged in)
-# Usage:    ./foundry-agent-region-check.sh [GLOB]
-#           SUBSCRIPTION="<sub-id>" ./foundry-agent-region-check.sh [GLOB]
+# Usage:    ./foundry-region-check.sh [GLOB]
+#           SUBSCRIPTION="<sub-id>" ./foundry-region-check.sh [GLOB]
 #
 #   GLOB  Optional shell glob to filter regions (case-insensitive). Examples:
 #           'eastus*'   -> eastus, eastus2
