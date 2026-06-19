@@ -9,4 +9,3 @@
     - Hosted Agents
   - Managed Identity with RBAC
   - Log Analytics Workspace & Application Insights
--

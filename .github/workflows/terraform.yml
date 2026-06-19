@@ -83,12 +83,22 @@ jobs:
                   file="environments/${{ inputs.environment }}.tfvars"
                   if [ -f "$file" ]; then
                     echo "arg=-var-file=$file" >> "$GITHUB_OUTPUT"
+                    echo "file=$file" >> "$GITHUB_OUTPUT"
                   else
                     echo "arg=" >> "$GITHUB_OUTPUT"
+                    echo "file=" >> "$GITHUB_OUTPUT"
                   fi
+
+            - name: Stage validate inputs
+              if: ${{ steps.vars.outputs.file != '' }}
+              run: cp "${{ steps.vars.outputs.file }}" terraform.tfvars
 
             - name: Validate
               run: terraform validate
+
+            - name: Clean staged validate inputs
+              if: ${{ always() }}
+              run: rm -f terraform.tfvars
 
             - name: Plan
               run: terraform plan -input=false -out=tfplan ${{ steps.vars.outputs.arg }}

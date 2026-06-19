@@ -57,14 +57,27 @@ cmd_validate() {
   log "offline init (-backend=false)"
   terraform -chdir="$STACK_DIR" init -backend=false -input=false >/dev/null
 
-  log "validate"
+  local staged_tfvars="$STACK_DIR/terraform.tfvars"
+  local backup=""
+  if [[ -f "$staged_tfvars" ]]; then
+    backup="$(mktemp)"
+    cp "$staged_tfvars" "$backup"
+  fi
+  trap 'if [[ -n "$backup" ]]; then mv "$backup" "$staged_tfvars"; else rm -f "$staged_tfvars"; fi' RETURN
+
+  cp "$STACK_DIR/environments/dev.tfvars" "$staged_tfvars"
+
+  log "validate (staged dev tfvars)"
   terraform -chdir="$STACK_DIR" validate
+  rm -f "$staged_tfvars"
+  trap - RETURN
 }
 
 cmd_plan() {
   local env="${1:-}"; shift || true
   [[ -n "$env" ]] || { echo "ERROR: plan requires an environment (dev|prod)" >&2; usage; }
   case "$env" in dev|prod) ;; *) die "unknown environment '$env' (expected dev|prod)";; esac
+  [[ "${1:-}" == "--" ]] && shift || true
 
   need terraform
   need az
