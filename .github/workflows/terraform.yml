@@ -46,6 +46,9 @@ jobs:
             # Feed the same coordinates to the stack's provider variables.
             TF_VAR_subscription_id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
             TF_VAR_tenant_id: ${{ vars.AZURE_TENANT_ID }}
+            # Object id of the CI deploy principal, granted Foundry Project Manager
+            # so it can publish agents. Set by the OIDC bootstrap script.
+            TF_VAR_ci_deploy_principal_id: ${{ vars.AZURE_CI_PRINCIPAL_ID }}
             # Expose environment *secrets* to Terraform as TF_VAR_* here, e.g.:
             # TF_VAR_db_admin_password: ${{ secrets.DB_ADMIN_PASSWORD }}
         steps:

@@ -18,6 +18,11 @@ output "project_name" {
   value       = module.foundry.ai_foundry_project_name["default"]
 }
 
+output "project_principal_id" {
+  description = "Principal ID of the default Foundry project's system-assigned managed identity (the Entra Agent ID anchor)."
+  value       = module.foundry.ai_foundry_project_system_identity_principal_id["default"]
+}
+
 output "openai_endpoint" {
   description = "OpenAI-compatible endpoint for model SDK clients."
   value       = "https://${module.foundry.ai_foundry_name}.cognitiveservices.azure.com/"

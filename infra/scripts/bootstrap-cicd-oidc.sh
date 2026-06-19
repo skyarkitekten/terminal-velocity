@@ -15,6 +15,8 @@
 #   3. Grants the SP RBAC:
 #        - "Storage Blob Data Contributor" on the tfstate storage account
 #        - a deploy role (default Contributor) at subscription scope
+#        - a role-assignment-admin role (default User Access Administrator) at
+#          subscription scope so applies can create Foundry RBAC assignments
 #   4. Creates the GitHub Environments and (for prod) a required reviewer.
 #   5. Sets the per-environment Actions *variables* the workflows read
 #      (AZURE_*, TFSTATE_*). Secrets are intentionally NOT set here.
@@ -36,6 +38,12 @@
 #   SUBSCRIPTION_ID     Default: current `az account show`.
 #   TENANT_ID           Default: current `az account show`.
 #   DEPLOY_ROLE         Subscription-scope role for applies. Default: "Contributor".
+#   RBAC_ADMIN_ROLE     Subscription-scope role that lets applies create role
+#                       assignments. Default: "User Access Administrator".
+#   RBAC_ADMIN_SCOPE    Scope for RBAC_ADMIN_ROLE. Default: the subscription.
+#                       Narrow to the workload resource group(s) once they exist
+#                       to reduce blast radius (the stack's assignments target the
+#                       Foundry account inside rg-<workload>-<env>).
 #   TFSTATE_RESOURCE_GROUP   Default: "rg-tfstate".
 #   TFSTATE_STORAGE_ACCOUNT  Default: "sttfstate31327".
 #   TFSTATE_CONTAINER        Default: "tfstate".
@@ -65,6 +73,8 @@ APPROVAL_ENVS="${APPROVAL_ENVS:-prod}"
 PROD_REVIEWER="${PROD_REVIEWER:-$(gh api user -q .login)}"
 APP_NAME="${APP_NAME:-${REPO##*/}-cicd}"
 DEPLOY_ROLE="${DEPLOY_ROLE:-Contributor}"
+RBAC_ADMIN_ROLE="${RBAC_ADMIN_ROLE:-User Access Administrator}"
+RBAC_ADMIN_SCOPE="${RBAC_ADMIN_SCOPE:-/subscriptions/${SUBSCRIPTION_ID}}"
 
 TFSTATE_RESOURCE_GROUP="${TFSTATE_RESOURCE_GROUP:-rg-tfstate}"
 TFSTATE_STORAGE_ACCOUNT="${TFSTATE_STORAGE_ACCOUNT:-sttfstate31327}"
@@ -76,6 +86,7 @@ log "Tenant:          $TENANT_ID"
 log "Environments:    $ENVIRONMENTS  (approval: $APPROVAL_ENVS)"
 log "App name:        $APP_NAME"
 log "Deploy role:     $DEPLOY_ROLE (subscription scope)"
+log "RBAC admin role: $RBAC_ADMIN_ROLE (scope: $RBAC_ADMIN_SCOPE)"
 log "State account:   $TFSTATE_STORAGE_ACCOUNT / $TFSTATE_CONTAINER (rg: $TFSTATE_RESOURCE_GROUP)"
 [[ "${DRY_RUN:-false}" == "true" ]] && log "DRY_RUN enabled — no changes will be made"
 echo >&2
@@ -151,6 +162,14 @@ run az role assignment create \
   --role "$DEPLOY_ROLE" --scope "/subscriptions/${SUBSCRIPTION_ID}" >/dev/null 2>&1 \
   || warn "deploy RBAC may already exist (ignored)"
 
+# Role-assignment write so applies can create Foundry RBAC assignments
+# (Contributor alone lacks Microsoft.Authorization/roleAssignments/write).
+log "Granting '$RBAC_ADMIN_ROLE' at scope $RBAC_ADMIN_SCOPE"
+run az role assignment create \
+  --assignee-object-id "$SP_OID" --assignee-principal-type ServicePrincipal \
+  --role "$RBAC_ADMIN_ROLE" --scope "$RBAC_ADMIN_SCOPE" >/dev/null 2>&1 \
+  || warn "rbac-admin RBAC may already exist (ignored)"
+
 # --- 4 & 5. GitHub environments, reviewers, and variables --------------------
 in_list() { local n="$1"; shift; for x in $*; do [[ "$x" == "$n" ]] && return 0; done; return 1; }
 
@@ -180,6 +199,7 @@ for env in $ENVIRONMENTS; do
       && log "  var $1 set" || warn "  failed to set var $1"
   }
   set_var AZURE_CLIENT_ID "$APP_ID"
+  set_var AZURE_CI_PRINCIPAL_ID "$SP_OID"
   set_var AZURE_TENANT_ID "$TENANT_ID"
   set_var AZURE_SUBSCRIPTION_ID "$SUBSCRIPTION_ID"
   set_var TFSTATE_RESOURCE_GROUP "$TFSTATE_RESOURCE_GROUP"

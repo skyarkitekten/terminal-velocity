@@ -171,8 +171,12 @@ Each GitHub Environment (`dev`, `prod`) supplies its own configuration, so the
 same workflow targets different subscriptions/settings without code changes:
 
 - **Variables** (non-secret IDs the workflow reads): `AZURE_CLIENT_ID`,
-  `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `TFSTATE_RESOURCE_GROUP`,
-  `TFSTATE_STORAGE_ACCOUNT`, `TFSTATE_CONTAINER`.
+  `AZURE_CI_PRINCIPAL_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`,
+  `TFSTATE_RESOURCE_GROUP`, `TFSTATE_STORAGE_ACCOUNT`, `TFSTATE_CONTAINER`.
+  `AZURE_CI_PRINCIPAL_ID` is the deploy SP's **object id** (distinct from
+  `AZURE_CLIENT_ID`, the app id); it's fed to Terraform as
+  `TF_VAR_ci_deploy_principal_id` so the stack can grant the SP the **Foundry
+  Project Manager** role to publish agents.
 - **Secrets** (e.g. a DB admin password): set on the environment, then surfaced
   to Terraform by mapping them to `TF_VAR_*` in the `env:` block of
   `terraform.yml`.
@@ -207,6 +211,14 @@ REPO="org/other-repo" PROD_REVIEWER="octocat" \
 The script sets the per-environment **variables** but never secrets — add any
 environment secrets your stack needs afterward, and map them to `TF_VAR_*` in
 `terraform.yml`.
+
+> **RBAC note:** the deploy SP is also granted **User Access Administrator**
+> (override with `RBAC_ADMIN_ROLE`) at subscription scope by default
+> (`RBAC_ADMIN_SCOPE`). Plain `Contributor` lacks
+> `Microsoft.Authorization/roleAssignments/write`, so applies that create the
+> Foundry identity/RBAC assignments would otherwise fail. Narrow
+> `RBAC_ADMIN_SCOPE` to the workload resource group(s) once they exist to reduce
+> blast radius.
 
 > Re-running is safe: existing apps, credentials, role assignments, and
 > environments are detected and left in place.

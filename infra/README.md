@@ -11,6 +11,11 @@ infra/
   scripts/                  Operational scripts (CI/CD OIDC bootstrap, region check)
   modules/                  Reusable, environment-agnostic building blocks
     resource_group/         Derives rg name + policy tags from inputs
+    log_analytics/          Log Analytics workspace (diagnostics sink)
+    application_insights/   Workspace-backed App Insights for telemetry
+    user_assigned_identity/ Agent runtime managed identity
+    ai_foundry/             Foundry account + project + model deployments
+    identity_rbac/          Least-privilege Foundry role assignments
   stacks/                   Deployable composition roots (provider + backend live here)
     platform/               The stack CI plans/applies
       main.tf               Composes modules — no raw resources
