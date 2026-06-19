@@ -133,8 +133,9 @@ terraform init \
 ```
 
 Use a unique `key` per environment + stack (e.g. `dev/network.tfstate`). In CI,
-authenticate with OIDC (`use_oidc = true`, `ARM_CLIENT_ID` / `ARM_TENANT_ID` /
-`ARM_SUBSCRIPTION_ID`) — never client secrets or storage keys.
+authenticate with OIDC (`use_oidc = true`, `use_azuread_auth = true`,
+`ARM_CLIENT_ID` / `ARM_TENANT_ID` / `ARM_SUBSCRIPTION_ID`) — never client
+secrets or storage keys.
 
 > State contains secrets in plaintext. Lock down RBAC, keep the account private,
 > and rely on encryption at rest (default). Never commit `*.tfstate`.

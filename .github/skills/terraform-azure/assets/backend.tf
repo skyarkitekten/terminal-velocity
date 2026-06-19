@@ -10,6 +10,7 @@ terraform {
     # storage_account_name = "sttfstate<unique>"
     # container_name       = "tfstate"
     # key                  = "<env>/<stack>.tfstate"
-    use_oidc = true
+    use_oidc         = true
+    use_azuread_auth = true
   }
 }

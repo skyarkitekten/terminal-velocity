@@ -62,6 +62,7 @@ terraform {
     container_name       = "tfstate"
     key                  = "dev/network.tfstate"  # unique per env + stack
     use_oidc             = true
+    use_azuread_auth     = true
   }
 }
 ```
@@ -78,8 +79,9 @@ terraform init \
 
 ## Authentication
 
-- **CI**: authenticate with OIDC (`use_oidc = true`) and set `ARM_CLIENT_ID`,
-  `ARM_TENANT_ID`, `ARM_SUBSCRIPTION_ID` — no client secrets, no storage keys.
+- **CI**: authenticate with OIDC (`use_oidc = true`, `use_azuread_auth = true`)
+  and set `ARM_CLIENT_ID`, `ARM_TENANT_ID`, `ARM_SUBSCRIPTION_ID` — no client
+  secrets, no storage keys.
 - **Local**: `az login`; the backend uses your Entra credentials with
   `use_azuread_auth`/`use_oidc`. Avoid `ARM_ACCESS_KEY`.
 
