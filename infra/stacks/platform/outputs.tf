@@ -55,3 +55,30 @@ output "openai_endpoint" {
   description = "OpenAI-compatible endpoint for model SDK clients."
   value       = module.ai_foundry.openai_endpoint
 }
+
+# --- Identity & RBAC ---
+
+output "agent_runtime_identity_id" {
+  description = "Resource ID of the agent runtime user-assigned managed identity."
+  value       = module.user_assigned_identity.id
+}
+
+output "agent_runtime_principal_id" {
+  description = "Principal (object) ID of the agent runtime managed identity."
+  value       = module.user_assigned_identity.principal_id
+}
+
+output "agent_runtime_client_id" {
+  description = "Client ID of the agent runtime managed identity for the delivery pipeline / agent SDK."
+  value       = module.user_assigned_identity.client_id
+}
+
+output "foundry_project_principal_id" {
+  description = "Principal ID of the Foundry project's system-assigned identity (the Entra Agent ID anchor)."
+  value       = module.ai_foundry.project_principal_id
+}
+
+output "ci_deploy_principal_id" {
+  description = "Object ID of the CI deploy principal granted the agent-publish role, or null when not configured."
+  value       = var.ci_deploy_principal_id
+}

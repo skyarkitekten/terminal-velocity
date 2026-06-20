@@ -37,6 +37,12 @@ variable "tags" {
   description = "Tags applied to all resources. Must satisfy subscription policy (Owner, Purpose, BillingCode)."
 }
 
+variable "ci_deploy_principal_id" {
+  type        = string
+  description = "Object (principal) ID of the CI deploy service principal granted the Foundry Project Manager role to publish agents. Fed by TF_VAR_ci_deploy_principal_id (AZURE_CI_PRINCIPAL_ID) in CI. When null, the CI role assignment is skipped."
+  default     = null
+}
+
 variable "model_deployments" {
   type = map(object({
     name = string

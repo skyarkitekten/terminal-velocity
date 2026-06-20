@@ -45,6 +45,18 @@ module "application_insights" {
   tags                       = var.tags
 }
 
+# --- Identity ---
+
+module "user_assigned_identity" {
+  source = "../../modules/user_assigned_identity"
+
+  workload            = "terminal-velocity"
+  environment         = var.environment
+  location            = var.location
+  resource_group_name = module.resource_group.name
+  tags                = var.tags
+}
+
 # --- AI Foundry ---
 
 module "ai_foundry" {
@@ -63,4 +75,17 @@ module "ai_foundry" {
   application_insights_connection_string = module.application_insights.connection_string
 
   model_deployments = var.model_deployments
+}
+
+# --- Identity & RBAC ---
+#
+# Least-privilege, keyless RBAC: the agent runtime identity gets the Foundry
+# data-plane role; the CI deploy principal gets the role to publish agents.
+
+module "identity_rbac" {
+  source = "../../modules/identity_rbac"
+
+  foundry_account_id         = module.ai_foundry.foundry_id
+  agent_runtime_principal_id = module.user_assigned_identity.principal_id
+  ci_deploy_principal_id     = var.ci_deploy_principal_id
 }
