@@ -2,25 +2,46 @@ name: Infra CI
 
 # Pull-request gate: format, validate, and plan the infra stack against dev.
 # Plan-only — never applies from a PR. The plan is the review artifact.
+#
+# The workflow runs on every PR so the required "Infra CI" check is always
+# reported (a path-filtered trigger would leave non-infra PRs stuck on
+# "Expected — Waiting for status to be reported"). Change detection gates the
+# expensive plan job; the aggregate `infra-ci` job reports the required context
+# whether or not infra files changed.
 
 on:
     pull_request:
-        paths:
-            - "infra/**"
-            - ".github/workflows/infra-ci.yml"
-            - ".github/workflows/terraform.yml"
 
 permissions:
     id-token: write
     contents: read
+    pull-requests: read
 
 concurrency:
     group: infra-ci-${{ github.ref }}
     cancel-in-progress: true
 
 jobs:
+    changes:
+        name: Detect infra changes
+        runs-on: ubuntu-latest
+        outputs:
+            infra: ${{ steps.filter.outputs.infra }}
+        steps:
+            - name: Filter paths
+              id: filter
+              uses: dorny/paths-filter@v3
+              with:
+                  filters: |
+                      infra:
+                        - 'infra/**'
+                        - '.github/workflows/infra-ci.yml'
+                        - '.github/workflows/terraform.yml'
+
     plan-dev:
         name: Plan (dev)
+        needs: changes
+        if: ${{ needs.changes.outputs.infra == 'true' }}
         uses: ./.github/workflows/terraform.yml
         with:
             environment: dev
@@ -28,20 +49,26 @@ jobs:
         secrets: inherit
 
     # Aggregate gate that reports a stable "Infra CI" check-run context for branch
-    # protection. The reusable-workflow job above surfaces as "Plan (dev) /
-    # terraform (dev)", which never matches the required "Infra CI" context, so
-    # this job provides it and fails unless the plan succeeded.
+    # protection. It always runs: it passes when no infra files changed (nothing
+    # to plan) and otherwise requires the plan to have succeeded.
     infra-ci:
         name: Infra CI
-        needs: plan-dev
+        needs: [changes, plan-dev]
         if: ${{ always() }}
         runs-on: ubuntu-latest
         steps:
-            - name: Verify plan succeeded
+            - name: Verify plan gate
               run: |
+                  changed="${{ needs.changes.outputs.infra }}"
                   result="${{ needs.plan-dev.result }}"
+                  echo "infra changed: $changed"
                   echo "plan-dev result: $result"
+                  if [ "$changed" != "true" ]; then
+                      echo "No infra changes in this PR; Infra CI gate passes without planning."
+                      exit 0
+                  fi
                   if [ "$result" != "success" ]; then
                       echo "::error::Infra CI gate failed because plan-dev did not succeed (result: $result)."
                       exit 1
                   fi
+                  echo "Infra changes planned successfully."
