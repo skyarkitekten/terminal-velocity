@@ -12,7 +12,7 @@ variable "agent_runtime_principal_id" {
 
 variable "ci_deploy_principal_id" {
   type        = string
-  description = "Principal (object) ID of the CI deploy service principal that publishes agents. When null, the CI role assignment is skipped."
+  description = "Principal (object) ID of the CI deploy service principal that publishes agents. When null, empty, or whitespace, the CI role assignment is skipped."
   default     = null
 }
 

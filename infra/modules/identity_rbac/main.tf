@@ -17,6 +17,11 @@ data "azurerm_role_definition" "ci_deploy" {
   role_definition_id = var.ci_deploy_role_definition_id
 }
 
+locals {
+  ci_deploy_principal_id = var.ci_deploy_principal_id == null ? "" : trimspace(var.ci_deploy_principal_id)
+  ci_deploy_enabled      = local.ci_deploy_principal_id != ""
+}
+
 # Agent runtime identity -> Foundry User on the Foundry account (data-plane:
 # call models, use the project at runtime).
 resource "azurerm_role_assignment" "agent_runtime" {
@@ -29,10 +34,10 @@ resource "azurerm_role_assignment" "agent_runtime" {
 # CI deploy principal -> Foundry Project Manager on the Foundry account (publish
 # agents). Conditional so plan/apply works before the principal id is wired in.
 resource "azurerm_role_assignment" "ci_deploy" {
-  count = var.ci_deploy_principal_id != null ? 1 : 0
+  count = local.ci_deploy_enabled ? 1 : 0
 
   scope              = var.foundry_account_id
   role_definition_id = data.azurerm_role_definition.ci_deploy.id
-  principal_id       = var.ci_deploy_principal_id
+  principal_id       = local.ci_deploy_principal_id
   principal_type     = "ServicePrincipal"
 }
