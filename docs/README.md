@@ -4,7 +4,7 @@ This documentation is structured as two main sections: **GitOps for Agents** and
 
 ## GitOps for Agents
 
-This is the primary point of the reference implementation: demonstrating how to use GitOps principles to manage and deploy agents effectively. This section includes:
+This is the primary point of the reference implementation: demonstrating how to use GitOps principles to manage and deploy agents effectively. See the [GitOps section](./gitops/README.md) for the full reading order, and the [GitOps roadmap & gap analysis](./gitops/roadmap.md) for where we are versus the reference posts. This section includes:
 
 - **Agent Deployment:** Step-by-step guides on deploying agents using GitOps workflows.
 - **Configuration Management:** Best practices for managing agent configurations through Git repositories.
