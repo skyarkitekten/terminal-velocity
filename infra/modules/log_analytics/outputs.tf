@@ -1,14 +1,14 @@
 output "id" {
   description = "Resource ID of the Log Analytics workspace."
-  value       = azurerm_log_analytics_workspace.this.id
+  value       = module.this.resource_id
 }
 
 output "name" {
   description = "Name of the Log Analytics workspace."
-  value       = azurerm_log_analytics_workspace.this.name
+  value       = nonsensitive(module.this.resource.name)
 }
 
 output "workspace_id" {
   description = "Workspace ID (GUID) of the Log Analytics workspace."
-  value       = azurerm_log_analytics_workspace.this.workspace_id
+  value       = nonsensitive(module.this.resource.workspace_id)
 }

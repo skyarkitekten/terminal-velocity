@@ -18,7 +18,7 @@ locals {
 
 module "foundry" {
   source  = "Azure/avm-ptn-aiml-ai-foundry/azurerm"
-  version = "~> 0.10"
+  version = "0.11.2"
 
   base_name                  = local.avm_base
   location                   = var.location
@@ -26,8 +26,53 @@ module "foundry" {
   enable_telemetry           = var.enable_telemetry
   tags                       = local.tags
 
-  create_byor              = false
-  create_private_endpoints = false
+  # BYOR: link the Foundry account/project to our own Key Vault, Storage
+  # Account, Cosmos DB, and AI Search rather than letting the module create
+  # (and own the lifecycle of) those dependent data services.
+  create_byor = true
+
+  # Only the Foundry account itself gets a module-owned private endpoint here.
+  # The BYOR dependencies (Key Vault, Storage, Cosmos DB, AI Search) already
+  # provision their own private endpoints in their respective modules.
+  create_private_endpoints            = true
+  private_endpoint_subnet_resource_id = var.pe_subnet_id
+
+  # Public network access stays enabled even with the private endpoint in
+  # place: our GitHub Actions OIDC runners have no VNet line-of-sight, so
+  # making the Foundry account private-only would break CI/CD applies. The
+  # private endpoint is additive, matching the BYOR dependency modules.
+  ai_foundry = {
+    name                          = "aif-${local.name_suffix}"
+    sku                           = "S0"
+    disable_local_auth            = true
+    allow_project_management      = true
+    create_ai_agent_service       = false
+    public_network_access_enabled = true
+  }
+
+  key_vault_definition = {
+    default = {
+      existing_resource_id = var.key_vault_id
+    }
+  }
+
+  storage_account_definition = {
+    default = {
+      existing_resource_id = var.storage_account_id
+    }
+  }
+
+  cosmosdb_definition = {
+    default = {
+      existing_resource_id = var.cosmosdb_id
+    }
+  }
+
+  ai_search_definition = {
+    default = {
+      existing_resource_id = var.ai_search_id
+    }
+  }
 
   diagnostic_settings = {
     to_law = {
@@ -39,14 +84,6 @@ module "foundry" {
     }
   }
 
-  ai_foundry = {
-    name                     = "aif-${local.name_suffix}"
-    sku                      = "S0"
-    disable_local_auth       = true
-    allow_project_management = true
-    create_ai_agent_service  = false
-  }
-
   ai_model_deployments = var.model_deployments
 
   ai_projects = {
@@ -54,6 +91,25 @@ module "foundry" {
       name         = "aifp-${local.name_suffix}"
       display_name = "Terminal Velocity - ${var.environment}"
       description  = "Foundry project for Terminal Velocity agents (${var.environment})"
+
+      create_project_connections = true
+      # True BYOR: these resources are created by our own modules, not by
+      # this pattern module, so the project connections reference them via
+      # existing_resource_id (matching the *_definition maps above) rather
+      # than new_resource_map_key, which only resolves when the pattern
+      # module itself creates the dependent resource.
+      key_vault_connection = {
+        existing_resource_id = var.key_vault_id
+      }
+      storage_account_connection = {
+        existing_resource_id = var.storage_account_id
+      }
+      cosmos_db_connection = {
+        existing_resource_id = var.cosmosdb_id
+      }
+      ai_search_connection = {
+        existing_resource_id = var.ai_search_id
+      }
     }
   }
 

@@ -22,6 +22,51 @@ moved {
   to   = module.resource_group.azurerm_resource_group.this
 }
 
+# Preserve state across the AVM-everywhere swap: each core module now wraps an
+# Azure Verified Module instead of a hand-rolled resource, so the underlying
+# resource address moves one level deeper without a destroy/recreate.
+# The AVM resource_group module itself ships an internal `moved` block from
+# azurerm_resource_group.this -> azapi_resource.this (left over from its own
+# past migration to azapi). Target that intermediate address here so the two
+# moved statements chain instead of both claiming the same final target.
+moved {
+  from = module.resource_group.azurerm_resource_group.this
+  to   = module.resource_group.module.this.azurerm_resource_group.this
+}
+
+moved {
+  from = module.log_analytics.azurerm_log_analytics_workspace.this
+  to   = module.log_analytics.module.this.azurerm_log_analytics_workspace.this
+}
+
+moved {
+  from = module.application_insights.azurerm_application_insights.this
+  to   = module.application_insights.module.this.azurerm_application_insights.this
+}
+
+moved {
+  from = module.user_assigned_identity.azurerm_user_assigned_identity.this
+  to   = module.user_assigned_identity.module.this.azurerm_user_assigned_identity.this
+}
+
+data "azurerm_client_config" "current" {}
+
+# --- Networking ---
+#
+# One VNet + one private-endpoint subnet per environment. Simple topology: no
+# hub-spoke, no on-prem connectivity. Exists solely to host the private
+# endpoints for the BYOR data services and the Foundry account below.
+
+module "networking" {
+  source = "../../modules/networking"
+
+  workload            = "terminal-velocity"
+  environment         = var.environment
+  location            = var.location
+  resource_group_name = module.resource_group.name
+  tags                = var.tags
+}
+
 # --- Observability ---
 
 module "log_analytics" {
@@ -57,6 +102,65 @@ module "user_assigned_identity" {
   tags                = var.tags
 }
 
+# --- BYOR data services ---
+#
+# Key Vault, Storage Account, Cosmos DB, and AI Search are provisioned as our
+# own resources (Bring Your Own Resource) rather than left for the Foundry
+# pattern module to create and own. Each gets a private endpoint into the PE
+# subnet above; public network access stays enabled on all four because the
+# GitHub Actions OIDC CD runners have no VNet line-of-sight — the private
+# endpoints are additive, not the sole access path.
+
+module "key_vault" {
+  source = "../../modules/key_vault"
+
+  workload            = "terminal-velocity"
+  environment         = var.environment
+  location            = var.location
+  resource_group_name = module.resource_group.name
+  resource_group_id   = module.resource_group.id
+  tags                = var.tags
+
+  pe_subnet_id = module.networking.pe_subnet_id
+  tenant_id    = data.azurerm_client_config.current.tenant_id
+}
+
+module "storage_account" {
+  source = "../../modules/storage_account"
+
+  workload            = "terminal-velocity"
+  environment         = var.environment
+  location            = var.location
+  resource_group_name = module.resource_group.name
+  tags                = var.tags
+
+  pe_subnet_id = module.networking.pe_subnet_id
+}
+
+module "cosmos_db" {
+  source = "../../modules/cosmos_db"
+
+  workload            = "terminal-velocity"
+  environment         = var.environment
+  location            = var.location
+  resource_group_name = module.resource_group.name
+  tags                = var.tags
+
+  pe_subnet_id = module.networking.pe_subnet_id
+}
+
+module "ai_search" {
+  source = "../../modules/ai_search"
+
+  workload            = "terminal-velocity"
+  environment         = var.environment
+  location            = var.location
+  resource_group_name = module.resource_group.name
+  tags                = var.tags
+
+  pe_subnet_id = module.networking.pe_subnet_id
+}
+
 # --- AI Foundry ---
 
 module "ai_foundry" {
@@ -73,6 +177,12 @@ module "ai_foundry" {
   application_insights_id                = module.application_insights.id
   application_insights_name              = module.application_insights.name
   application_insights_connection_string = module.application_insights.connection_string
+
+  key_vault_id       = module.key_vault.resource_id
+  storage_account_id = module.storage_account.id
+  cosmosdb_id        = module.cosmos_db.id
+  ai_search_id       = module.ai_search.id
+  pe_subnet_id       = module.networking.pe_subnet_id
 
   model_deployments = var.model_deployments
 }

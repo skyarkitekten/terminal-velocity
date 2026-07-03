@@ -15,9 +15,14 @@ locals {
   })
 }
 
-resource "azurerm_user_assigned_identity" "this" {
+module "this" {
+  source  = "Azure/avm-res-managedidentity-userassignedidentity/azurerm"
+  version = "0.5.0"
+
   name                = "id-${local.name_suffix}"
   location            = var.location
   resource_group_name = var.resource_group_name
   tags                = local.tags
+
+  enable_telemetry = true
 }

@@ -59,6 +59,31 @@ variable "application_insights_connection_string" {
   sensitive   = true
 }
 
+variable "key_vault_id" {
+  type        = string
+  description = "Resource ID of the BYOR Key Vault the Foundry account/project connects to."
+}
+
+variable "storage_account_id" {
+  type        = string
+  description = "Resource ID of the BYOR Storage Account the Foundry account/project connects to."
+}
+
+variable "cosmosdb_id" {
+  type        = string
+  description = "Resource ID of the BYOR Cosmos DB account the Foundry account/project connects to."
+}
+
+variable "ai_search_id" {
+  type        = string
+  description = "Resource ID of the BYOR AI Search service the Foundry account/project connects to."
+}
+
+variable "pe_subnet_id" {
+  type        = string
+  description = "Resource ID of the subnet used for the Foundry account's own private endpoint."
+}
+
 variable "model_deployments" {
   type = map(object({
     name = string

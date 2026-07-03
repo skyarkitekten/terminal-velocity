@@ -14,8 +14,12 @@ locals {
   })
 }
 
-resource "azurerm_resource_group" "this" {
-  name     = "rg-${local.name_suffix}"
-  location = var.location
-  tags     = local.tags
+module "this" {
+  source  = "Azure/avm-res-resources-resourcegroup/azurerm"
+  version = "0.4.0"
+
+  enable_telemetry = true
+  name             = "rg-${local.name_suffix}"
+  location         = var.location
+  tags             = local.tags
 }
