@@ -3,8 +3,9 @@
 # Wraps the AVM storage account module for Azure AI Foundry BYOR usage. Storage
 # account names must be globally unique and limited to 3-24 lowercase
 # alphanumeric characters, so this module sanitizes/truncates the
-# workload/environment prefix and appends a stable random suffix. The suffix is
-# persisted in state and only rotates if the naming keepers change.
+# workload/environment prefix and appends a stable hash suffix derived from the
+# resource group/workload/environment (deterministic, not a random resource, so
+# the name - and its resource ID - are known at plan time on first apply).
 #
 # Public network access stays enabled on purpose: the GitHub Actions OIDC-based
 # delivery pipeline manages this resource over Azure's management plane without
@@ -12,20 +13,6 @@
 # path for BYOR consumers rather than making private connectivity the sole path.
 
 data "azurerm_client_config" "current" {}
-
-resource "random_string" "suffix" {
-  length  = 5
-  lower   = true
-  numeric = true
-  special = false
-  upper   = false
-
-  keepers = {
-    resource_group_name = var.resource_group_name
-    workload            = var.workload
-    environment         = var.environment
-  }
-}
 
 locals {
   name_suffix       = "${var.workload}-${var.environment}"
@@ -39,9 +26,17 @@ locals {
   workload_name_raw    = join("", regexall("[a-z0-9]", lower(var.workload)))
   environment_name_raw = join("", regexall("[a-z0-9]", lower(var.environment)))
   environment_name     = length(local.environment_name_raw) > 0 ? local.environment_name_raw : "dev"
-  max_workload_length  = max(1, 24 - length("st") - length(local.environment_name) - random_string.suffix.length)
+
+  # Deterministic hash suffix (rather than a random_string resource) so the
+  # storage account name - and therefore its resource ID - is fully known at
+  # plan time on first apply. A random_string resource's value is unknown
+  # until it's created, which would make the account name (and the ID derived
+  # from it) unknown too, breaking the for_each Foundry's BYOR wiring uses to
+  # decide whether to create or link this account.
+  name_hash            = substr(sha1("${local.resource_group_id}:${var.workload}:${var.environment}"), 0, 5)
+  max_workload_length  = max(1, 24 - length("st") - length(local.environment_name) - length(local.name_hash))
   workload_name        = length(local.workload_name_raw) > 0 ? substr(local.workload_name_raw, 0, local.max_workload_length) : "tv"
-  storage_account_name = "st${local.workload_name}${local.environment_name}${random_string.suffix.result}"
+  storage_account_name = "st${local.workload_name}${local.environment_name}${local.name_hash}"
 }
 
 module "this" {

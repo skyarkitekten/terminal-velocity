@@ -6,11 +6,14 @@
 # pipeline can keep managing the resource over the control plane while runtime
 # traffic can use the private endpoint.
 
+data "azurerm_client_config" "current" {}
+
 locals {
   workload_fragment_raw = trim(replace(lower(var.workload), "/[^a-z0-9-]/", "-"), "-")
   max_workload_length   = 44 - length("cosmos--${var.environment}")
   workload_fragment     = length(trim(substr(local.workload_fragment_raw, 0, local.max_workload_length), "-")) > 0 ? trim(substr(local.workload_fragment_raw, 0, local.max_workload_length), "-") : "app"
   cosmos_name           = "cosmos-${local.workload_fragment}-${var.environment}"
+  resource_group_id     = "/subscriptions/${data.azurerm_client_config.current.subscription_id}/resourceGroups/${var.resource_group_name}"
 
   tags = merge(var.tags, {
     Environment = var.environment

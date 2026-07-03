@@ -5,6 +5,8 @@
 # for the searchService sub-resource into the workload's private endpoint
 # subnet.
 
+data "azurerm_client_config" "current" {}
+
 locals {
   name_suffix = "${var.workload}-${var.environment}"
 
@@ -14,6 +16,7 @@ locals {
   # against invalid workload input, then truncate to the service name limit.
   sanitized_name_suffix = trim(replace(lower(local.name_suffix), "/[^a-z0-9-]/", "-"), "-")
   service_name          = substr("srch-${local.sanitized_name_suffix}", 0, 60)
+  resource_group_id     = "/subscriptions/${data.azurerm_client_config.current.subscription_id}/resourceGroups/${var.resource_group_name}"
 
   tags = merge(var.tags, {
     Environment = var.environment
