@@ -93,17 +93,22 @@ module "foundry" {
       description  = "Foundry project for Terminal Velocity agents (${var.environment})"
 
       create_project_connections = true
+      # True BYOR: these resources are created by our own modules, not by
+      # this pattern module, so the project connections reference them via
+      # existing_resource_id (matching the *_definition maps above) rather
+      # than new_resource_map_key, which only resolves when the pattern
+      # module itself creates the dependent resource.
       key_vault_connection = {
-        new_resource_map_key = "default"
+        existing_resource_id = var.key_vault_id
       }
       storage_account_connection = {
-        new_resource_map_key = "default"
+        existing_resource_id = var.storage_account_id
       }
       cosmos_db_connection = {
-        new_resource_map_key = "default"
+        existing_resource_id = var.cosmosdb_id
       }
       ai_search_connection = {
-        new_resource_map_key = "default"
+        existing_resource_id = var.ai_search_id
       }
     }
   }
