@@ -2,15 +2,15 @@
 
 output "name" {
   description = "Name of the resource group."
-  value       = azurerm_resource_group.this.name
+  value       = module.this.name
 }
 
 output "id" {
   description = "Resource ID of the resource group."
-  value       = azurerm_resource_group.this.id
+  value       = module.this.resource_id
 }
 
 output "location" {
   description = "Azure region the resource group is deployed to."
-  value       = azurerm_resource_group.this.location
+  value       = module.this.location
 }

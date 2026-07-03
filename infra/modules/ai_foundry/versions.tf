@@ -7,8 +7,9 @@ terraform {
       version = "~> 2.6"
     }
     azurerm = {
-      source  = "hashicorp/azurerm"
-      version = "~> 4.0"
+      source = "hashicorp/azurerm"
+      # avm-ptn-aiml-ai-foundry 0.11.2 requires azurerm >= 4.38.
+      version = "~> 4.38"
     }
     time = {
       source  = "hashicorp/time"
