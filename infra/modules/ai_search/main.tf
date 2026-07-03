@@ -13,9 +13,10 @@ locals {
   # Azure AI Search service names must be 2-60 characters, lowercase
   # alphanumeric or dashes, and cannot start or end with a dash. Sanitize using
   # the same replace/trim pattern as ai_foundry's avm_base local to guard
-  # against invalid workload input, then truncate to the service name limit.
+  # against invalid workload input, then truncate to the service name limit
+  # and re-trim in case truncation lands on a trailing dash.
   sanitized_name_suffix = trim(replace(lower(local.name_suffix), "/[^a-z0-9-]/", "-"), "-")
-  service_name          = substr("srch-${local.sanitized_name_suffix}", 0, 60)
+  service_name          = trim(substr("srch-${local.sanitized_name_suffix}", 0, 60), "-")
   resource_group_id     = "/subscriptions/${data.azurerm_client_config.current.subscription_id}/resourceGroups/${var.resource_group_name}"
 
   tags = merge(var.tags, {

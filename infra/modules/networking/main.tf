@@ -27,9 +27,12 @@ module "this" {
 
   subnets = {
     private_endpoints = {
-      name                              = "snet-pe-${local.name_suffix}"
-      address_prefixes                  = [var.pe_subnet_address_prefix]
-      private_endpoint_network_policies = "Enabled"
+      name             = "snet-pe-${local.name_suffix}"
+      address_prefixes = [var.pe_subnet_address_prefix]
+      # Azure requires this disabled for a subnet to host private endpoints;
+      # leaving it enabled causes private endpoint creation to fail at apply
+      # time for every BYOR module wired to this subnet.
+      private_endpoint_network_policies = "Disabled"
     }
   }
 }
