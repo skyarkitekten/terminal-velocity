@@ -25,9 +25,13 @@ moved {
 # Preserve state across the AVM-everywhere swap: each core module now wraps an
 # Azure Verified Module instead of a hand-rolled resource, so the underlying
 # resource address moves one level deeper without a destroy/recreate.
+# The AVM resource_group module itself ships an internal `moved` block from
+# azurerm_resource_group.this -> azapi_resource.this (left over from its own
+# past migration to azapi). Target that intermediate address here so the two
+# moved statements chain instead of both claiming the same final target.
 moved {
   from = module.resource_group.azurerm_resource_group.this
-  to   = module.resource_group.module.this.azapi_resource.this
+  to   = module.resource_group.module.this.azurerm_resource_group.this
 }
 
 moved {
