@@ -2,9 +2,10 @@
 #
 # Provisions a minimal Azure Cosmos DB account (NoSQL API) for Azure AI Foundry
 # BYOR scenarios and adds a private endpoint on the shared private endpoint
-# subnet. Public network access remains enabled so the GitHub Actions OIDC CD
-# pipeline can keep managing the resource over the control plane while runtime
-# traffic can use the private endpoint.
+# subnet. Public network access is disabled: data-plane access is restricted
+# to the private endpoint only. The GitHub Actions OIDC CD pipeline continues
+# to manage the resource over the control plane, which is unaffected by this
+# setting.
 
 data "azurerm_client_config" "current" {}
 
@@ -30,10 +31,11 @@ module "this" {
   resource_group_name = var.resource_group_name
   tags                = local.tags
 
-  enable_telemetry              = true
-  free_tier_enabled             = var.free_tier_enabled
-  automatic_failover_enabled    = false
-  public_network_access_enabled = true
+  enable_telemetry                      = true
+  free_tier_enabled                     = var.free_tier_enabled
+  automatic_failover_enabled            = false
+  public_network_access_enabled         = false
+  network_acl_bypass_for_azure_services = false
 
   consistency_policy = {
     consistency_level = var.consistency_level
