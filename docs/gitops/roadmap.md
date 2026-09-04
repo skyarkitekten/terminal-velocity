@@ -31,9 +31,11 @@ below.
 
 ## 2. Gap analysis vs. the reference posts
 
-Legend: ✅ done · 🟡 partial/captured as issue · ❌ missing and untracked.
-As of the last review every identified gap is tracked by an issue — there are no
-❌ rows.
+Legend: ✅ done · 🟡 partial · ❌ missing and untracked · n/a not applicable
+(the posts explicitly place this outside our scope).
+
+Most 🟡 rows carry an issue number; the few without one are deliberate deferrals
+recorded here rather than in the backlog. There are currently no ❌ rows.
 
 ### Infrastructure as Code
 
@@ -48,7 +50,7 @@ As of the last review every identified gap is tracked by an issue — there are 
 | **`terraform plan` as sticky PR comment** | P1, P4 | 🟡 #2 | Captured; not implemented. Posts treat the plan as the review artifact. |
 | **Drift detection job** (`plan -refresh-only` on a schedule) | P4 | 🟡 #44 | Recommended by P4; nothing scheduled yet. |
 | Agent definition in Terraform | P1, P4 | n/a | Posts explicitly say agent versions are **not** Terraform's job — keep them in the agent pipeline (script/SDK). |
-| Private networking (VNet/PE) | P4 | 🟡 | `ai_foundry` exposes `create_private_endpoints`; deferred, fine for skeleton. |
+| Private networking (VNet/PE) | P4 | 🟡 *(no issue)* | `ai_foundry` exposes `create_private_endpoints`; deliberately deferred, fine for skeleton. File an issue if we productionise. |
 
 ### CI/CD — agent delivery
 
@@ -64,7 +66,7 @@ As of the last review every identified gap is tracked by an issue — there are 
 | **CODEOWNERS** for `src/prompts|agents`, `infra/**` | P3 | 🟡 #37 | Enforce review by path. |
 | **Prompt-based agent path** (no build) | P2 | 🟡 #43 | Decision: ship **both** hosted + prompt-based agents. Prompt-based = versioned YAML/config bundle. |
 | **Model-version upgrade playbook** | P1 | 🟡 #65 | PR changes only the model deployment name/version → full eval at 0% traffic → canary. Doc-only follow-up. |
-| Two environments (dev/prod) | P1, P2 | ✅ **decided** (ADR #52) | This demo uses **dev → prod** (no staging); lean on canary in prod. Deviates from P2's recommended dev → test → prod; ADR records the compensating controls. |
+| Two environments (dev/prod) | P1, P2 | ✅ **decided**; ADR #52 pending | This demo uses **dev → prod** (no staging); lean on canary in prod. Deviates from P2's recommended dev → test → prod; ADR #52 will record the compensating controls. |
 | **Agent lifecycle scripts** (deploy / promote / rollback / inspect) | P1–P3 | 🟡 #55 | The Python CLI surface the workflows call. Owns the deployment manifest; makes build-once/promote-same mechanical. Blocks #15, #27, #28, #39. |
 | **Per-environment agent config + schema** | P2 | 🟡 #60 | `config/agent-config.<env>.json` + JSON Schema, validated in CI. Endpoints/model/thresholds per env; no secrets. |
 | **Post-deploy smoke test gate** | P1 | 🟡 #62 | Every stage gates on it. Distinct from evals: verifies liveness and wiring, not quality. |
@@ -136,12 +138,13 @@ next. Mirrors P1's maturity ladder, scoped to GitOps.
   prompt-based (YAML/config bundle, #43) agents.
 - **Self-hosting** — tracked as a spike (#40); out of scope for the initial demo.
 
-**Open — tracked as ADRs**
-- **azd vs. Foundry SDK script** for version create/promote — #54. Blocks #15,
-  #27, #28, #55.
-- **Toolboxes (P3)** — versioned central bundles vs. in-repo `src/tools` — #53.
-  Determines whether a tool change forces a new agent version.
-- **Model-version upgrade playbook** — now tracked as #65.
+**Open — now tracked**
+- **azd vs. Foundry SDK script** for version create/promote — ADR #54. Blocks
+  #15, #27, #28, #55.
+- **Toolboxes (P3)** — versioned central bundles vs. in-repo `src/tools` — ADR
+  #53. Determines whether a tool change forces a new agent version.
+- **Model-version upgrade playbook** — #65. A runbook rather than an ADR: the
+  decision is not in question, only the procedure.
 
 ## 5. Reference implementations
 
