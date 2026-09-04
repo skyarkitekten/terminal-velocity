@@ -21,16 +21,23 @@
 #   5. Sets the per-environment Actions *variables* the workflows read
 #      (AZURE_*, TFSTATE_*). Secrets are intentionally NOT set here.
 #
+# About `prod-plan`:
+#   Infra CI plans prod on every infra PR so reviewers see the promotion diff
+#   inline. It cannot run under the `prod` environment, because prod's required
+#   reviewer would stall the PR waiting for approval. `prod-plan` is therefore a
+#   reviewer-free twin of `prod`: same identity, same variables, plan-only. The
+#   Terraform target (tfstate key and tfvars) stays `prod`.
+#
 # Requires: az CLI (logged in), gh CLI (logged in), jq
 #
 # Usage:
 #   ./bootstrap-cicd-oidc.sh                      # uses current az/gh context
-#   ENVIRONMENTS="dev prod" ./bootstrap-cicd-oidc.sh
+#   ENVIRONMENTS="dev prod prod-plan" ./bootstrap-cicd-oidc.sh
 #   PROD_REVIEWER="octocat" ./bootstrap-cicd-oidc.sh
 #
 # Key environment variables (all optional unless noted):
 #   REPO                GitHub "owner/repo". Default: `gh repo view`.
-#   ENVIRONMENTS        Space-separated list. Default: "dev prod".
+#   ENVIRONMENTS        Space-separated list. Default: "dev prod prod-plan".
 #   APPROVAL_ENVS       Envs that require a reviewer. Default: "prod".
 #   PROD_REVIEWER       GitHub login to set as required reviewer on APPROVAL_ENVS.
 #                       Default: the authenticated gh user.
@@ -68,7 +75,7 @@ REPO="${REPO:-$(gh repo view --json nameWithOwner -q .nameWithOwner)}"
 SUBSCRIPTION_ID="${SUBSCRIPTION_ID:-$(az account show --query id -o tsv)}"
 TENANT_ID="${TENANT_ID:-$(az account show --query tenantId -o tsv)}"
 
-ENVIRONMENTS="${ENVIRONMENTS:-dev prod}"
+ENVIRONMENTS="${ENVIRONMENTS:-dev prod prod-plan}"
 APPROVAL_ENVS="${APPROVAL_ENVS:-prod}"
 PROD_REVIEWER="${PROD_REVIEWER:-$(gh api user -q .login)}"
 APP_NAME="${APP_NAME:-${REPO##*/}-cicd}"
