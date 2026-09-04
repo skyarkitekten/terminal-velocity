@@ -5,16 +5,37 @@ name: Terraform
 # Auth is keyless: azure/login exchanges the workflow's OIDC token for Azure
 # credentials, and the azurerm backend uses the same token (ARM_USE_OIDC).
 # Callers pass `secrets: inherit` so environment-scoped secrets resolve here.
+#
+# `environment` names the *Terraform* environment (tfstate key + tfvars file).
+# `github-environment` optionally decouples the *GitHub* Environment the job runs
+# under, so a PR can plan prod without tripping prod's required reviewers.
+#
+# The check steps are `continue-on-error` so a failure still reaches the PR
+# comment; the "Verify checks" step re-asserts the gate before Apply can run.
 
 on:
     workflow_call:
         inputs:
             environment:
-                description: Target GitHub Environment (also the tfstate key prefix).
+                description: Terraform environment — tfstate key prefix and environments/<env>.tfvars.
                 required: true
+                type: string
+            github-environment:
+                description: >-
+                    GitHub Environment supplying the OIDC identity and Actions
+                    variables. Defaults to `environment`. Override it to plan an
+                    environment whose real GitHub Environment is behind required
+                    reviewers — PR-time prod planning uses `prod-plan`.
+                required: false
+                default: ""
                 type: string
             apply:
                 description: Apply the plan. When false, plan only (use for PRs).
+                required: false
+                default: false
+                type: boolean
+            comment-on-pr:
+                description: Post the rendered plan as a sticky comment on the triggering PR.
                 required: false
                 default: false
                 type: boolean
@@ -27,12 +48,13 @@ on:
 permissions:
     id-token: write # required for OIDC federated login to Azure
     contents: read
+    pull-requests: write # sticky plan comment
 
 jobs:
     terraform:
         name: terraform (${{ inputs.environment }})
         runs-on: ubuntu-latest
-        environment: ${{ inputs.environment }}
+        environment: ${{ inputs.github-environment || inputs.environment }}
         defaults:
             run:
                 working-directory: infra/stacks/platform
@@ -69,10 +91,14 @@ jobs:
 
             - name: Format check
               # Cover the whole tree (modules + stacks), not just this stack.
+              id: fmt
+              continue-on-error: true
               working-directory: infra
               run: terraform fmt -check -recursive
 
             - name: Init
+              id: init
+              continue-on-error: true
               run: |
                   terraform init -input=false \
                     -backend-config="resource_group_name=${{ vars.TFSTATE_RESOURCE_GROUP }}" \
@@ -97,15 +123,138 @@ jobs:
               run: cp "${{ steps.vars.outputs.file }}" terraform.tfvars
 
             - name: Validate
+              id: validate
+              continue-on-error: true
               run: terraform validate
 
             - name: Clean staged validate inputs
               if: ${{ always() }}
               run: rm -f terraform.tfvars
 
+            # Checkov static analysis belongs here (issue #46): after Validate,
+            # before Plan. Give it `id: checkov` and `continue-on-error: true` and
+            # add a matching row to CHECK_ROWS in "Render plan" below.
+
             - name: Plan
-              run: terraform plan -input=false -out=tfplan ${{ steps.vars.outputs.arg }}
+              id: plan
+              continue-on-error: true
+              run: |
+                  set -o pipefail
+                  terraform plan -input=false -no-color -out=tfplan \
+                    ${{ steps.vars.outputs.arg }} 2>&1 | tee plan-output.txt
+
+            - name: Render plan
+              id: render
+              if: ${{ always() }}
+              env:
+                  ENVIRONMENT: ${{ inputs.environment }}
+                  FMT: ${{ steps.fmt.outcome }}
+                  INIT: ${{ steps.init.outcome }}
+                  VALIDATE: ${{ steps.validate.outcome }}
+                  PLAN: ${{ steps.plan.outcome }}
+              run: |
+                  set -euo pipefail
+
+                  # Human-readable diff. `terraform show` on the saved plan is
+                  # quieter than the raw plan log and redacts sensitive values.
+                  # When the plan itself failed there is no plan file, so fall
+                  # back to the plan log, which holds the error.
+                  rendered=false
+                  if [ "$PLAN" = "success" ] && [ -f tfplan ]; then
+                    if terraform show -no-color tfplan > plan-body.txt \
+                       && terraform show -json tfplan > plan.json; then
+                      add=$(jq '[.resource_changes[]? | select(.change.actions == ["create"])] | length' plan.json)
+                      change=$(jq '[.resource_changes[]? | select(.change.actions == ["update"])] | length' plan.json)
+                      destroy=$(jq '[.resource_changes[]? | select(.change.actions == ["delete"])] | length' plan.json)
+                      replace=$(jq '[.resource_changes[]? | select((.change.actions | length) > 1)] | length' plan.json)
+                      summary="\`+${add}\` to add · \`~${change}\` to change · \`-${destroy}\` to destroy · \`±${replace}\` to replace"
+                      rendered=true
+                    fi
+                    # plan.json carries full resource attributes; never publish it.
+                    rm -f plan.json
+                  fi
+
+                  if [ "$rendered" = false ]; then
+                    cp plan-output.txt plan-body.txt 2>/dev/null || echo "Plan did not run." > plan-body.txt
+                    if [ "$PLAN" = "success" ]; then
+                      summary="**Could not render the plan** — raw output below."
+                    else
+                      summary="**Plan failed** — output below."
+                    fi
+                  fi
+
+                  # GitHub caps a comment at 65536 characters. Keep the tail: it
+                  # holds the plan summary line and any error.
+                  max=55000
+                  if [ "$(wc -c < plan-body.txt)" -gt "$max" ]; then
+                    { echo "[... truncated — see the workflow run for the full plan ...]"; echo; tail -c "$max" plan-body.txt; } > plan-body.trunc
+                    mv plan-body.trunc plan-body.txt
+                  fi
+
+                  # shellcheck disable=SC2016  # backticks are literal markdown
+                  row() { printf '| %s | `%s` |\n' "$1" "$2"; }
+                  {
+                    row 'Format 🖌' "$FMT"
+                    row 'Init ⚙️' "$INIT"
+                    row 'Validate 🤖' "$VALIDATE"
+                    row 'Plan 📖' "$PLAN"
+                  } > check-rows.md
+
+                  {
+                    echo "### Terraform plan — \`${ENVIRONMENT}\`"
+                    echo
+                    echo '| check | result |'
+                    echo '| ----- | ------ |'
+                    cat check-rows.md
+                    echo
+                    echo "$summary"
+                    echo
+                    echo '<details><summary>Show plan</summary>'
+                    echo
+                    echo '```terraform'
+                    cat plan-body.txt
+                    echo '```'
+                    echo
+                    echo '</details>'
+                    echo
+                    echo "<sub>stack \`infra/stacks/platform\` · commit \`${GITHUB_SHA:0:7}\` · [run](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID})</sub>"
+                  } > "${GITHUB_WORKSPACE}/plan-comment.md"
+
+                  cat "${GITHUB_WORKSPACE}/plan-comment.md" >> "$GITHUB_STEP_SUMMARY"
+
+            - name: Post plan comment
+              # Fork PRs get a read-only GITHUB_TOKEN, so skip rather than fail.
+              if: >-
+                  always() && inputs.comment-on-pr
+                  && github.event_name == 'pull_request'
+                  && github.event.pull_request.head.repo.fork == false
+              uses: marocchino/sticky-pull-request-comment@v2
+              with:
+                  header: terraform-plan-${{ inputs.environment }}
+                  path: ${{ github.workspace }}/plan-comment.md
+
+            - name: Verify checks
+              # Re-assert the gate that `continue-on-error` relaxed above, so a
+              # failed check still fails the job — and blocks Apply.
+              if: ${{ always() }}
+              env:
+                  FMT: ${{ steps.fmt.outcome }}
+                  INIT: ${{ steps.init.outcome }}
+                  VALIDATE: ${{ steps.validate.outcome }}
+                  PLAN: ${{ steps.plan.outcome }}
+              run: |
+                  failed=0
+                  for check in FMT INIT VALIDATE PLAN; do
+                    outcome="${!check}"
+                    echo "$check: $outcome"
+                    if [ "$outcome" != "success" ]; then
+                      echo "::error::$check did not succeed (outcome: $outcome)."
+                      failed=1
+                    fi
+                  done
+                  exit "$failed"
 
             - name: Apply
               if: ${{ inputs.apply }}
               run: terraform apply -input=false tfplan
+

@@ -47,7 +47,7 @@ recorded here rather than in the backlog. There are currently no ❌ rows.
 | Model deployment in Terraform | P4 | ✅ | `gpt-4.1-mini` GlobalStandard |
 | Runtime + CI identity & RBAC | P4 | ✅ | `identity_rbac` module |
 | **Azure Container Registry (ACR)** | P1, P2 | 🟡 #35 | Hosted-agent images need an ACR (`admin_enabled=false`) + `AcrPull` to the project identity. No ACR module exists yet. |
-| **`terraform plan` as sticky PR comment** | P1, P4 | 🟡 #2 | Captured; not implemented. Posts treat the plan as the review artifact. |
+| `terraform plan` as sticky PR comment | P1, P4 | ✅ | Plans dev **and** prod on every infra PR; `prod-plan` environment keeps prod planning off the approval gate. |
 | **Drift detection job** (`plan -refresh-only` on a schedule) | P4 | 🟡 #44 | Recommended by P4; nothing scheduled yet. |
 | Agent definition in Terraform | P1, P4 | n/a | Posts explicitly say agent versions are **not** Terraform's job — keep them in the agent pipeline (script/SDK). |
 | Private networking (VNet/PE) | P4 | 🟡 *(no issue)* | `ai_foundry` exposes `create_private_endpoints`; deliberately deferred, fine for skeleton. File an issue if we productionise. |
@@ -101,9 +101,8 @@ next. Mirrors P1's maturity ladder, scoped to GitOps.
    depends on: agent deployment mechanism (#54), environment topology (#52), and
    toolbox strategy (#53). #54 in particular blocks the lifecycle scripts and
    therefore the whole agent pipeline.
-1. **Close the IaC gaps** — add ACR module (+ `AcrPull`), `plan` PR-comment (#2),
-   scheduled drift detection (#44), CODEOWNERS (#37). *(unblocks the container
-   path; cheap.)*
+1. **Close the IaC gaps** — add ACR module (+ `AcrPull`), scheduled drift
+   detection (#44), CODEOWNERS (#37). *(unblocks the container path; cheap.)*
 2. **Lay the Python foundation** — dependencies + `ruff`/`pytest`/type-check
    config (#56), `src/agents` + `src/tools` skeleton (#58), test suites (#57),
    `bandit` (#59). *(nothing else can be built first.)*

@@ -149,11 +149,11 @@ merges deploy — keyless, auditable, and promoted dev → prod through Git.
 
 Three workflows under `.github/workflows/` implement a standard GitOps loop:
 
-| Workflow        | Trigger                    | Responsibility                                                                                                                                     |
-| --------------- | -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `terraform.yml` | `workflow_call` (reusable) | `fmt` → `init` → `validate` → `plan`, and a conditional `apply`. Runs in a GitHub Environment so its variables, secrets, and approval gates apply. |
-| `infra-ci.yml`  | PR touching `infra/**`     | Plan-only against **dev**. The plan is the review artifact — it never applies.                                                                     |
-| `infra-cd.yml`  | Push to `main` / manual    | `deploy-dev` (apply) → `deploy-prod` (apply). `deploy-prod` `needs` dev and runs only after the prod environment's reviewer approves.              |
+| Workflow        | Trigger                    | Responsibility                                                                                                                                                    |
+| --------------- | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `terraform.yml` | `workflow_call` (reusable) | `fmt` → `init` → `validate` → `plan`, a sticky PR plan comment, and a conditional `apply`. Runs in a GitHub Environment so its variables, secrets, and approval gates apply. |
+| `infra-ci.yml`  | PR touching `infra/**`     | Plan-only against **dev and prod**. The plans are the review artifact — it never applies.                                                                          |
+| `infra-cd.yml`  | Push to `main` / manual    | `deploy-dev` (apply) → `deploy-prod` (apply). `deploy-prod` `needs` dev and runs only after the prod environment's reviewer approves.                              |
 
 Everything authenticates with **OIDC** — `azure/login` exchanges the workflow's
 short-lived token for Azure credentials, and the `azurerm` backend reuses it
@@ -165,10 +165,57 @@ changes. The backend `key` is derived per environment
 (`<env>/terminal-velocity.tfstate`), and an optional
 `infra/environments/<env>.tfvars` is applied when present.
 
+### The plan is the review artifact
+
+Every infra PR posts the rendered `terraform plan` as a **sticky comment** — one
+per environment, edited in place on each push rather than appended, so the PR
+never accumulates stale diffs. The comment carries a status table
+(format / init / validate / plan), a change summary (`+add ~change -destroy
+±replace`), and the full plan in a collapsed `<details>` block. The same content
+is written to the job summary.
+
+To guarantee the comment appears even when something fails, the check steps in
+`terraform.yml` are `continue-on-error` and a trailing **Verify checks** step
+re-asserts the gate. A failed plan therefore still reaches the reviewer as a
+comment *and* still blocks `apply`.
+
+Plans are truncated near GitHub's 65 536-character comment limit, keeping the
+tail — where the plan summary and any error live — and linking back to the run
+for the full output. Comments are skipped on fork PRs, whose `GITHUB_TOKEN` is
+read-only.
+
+### Planning prod from a PR: the `prod-plan` environment
+
+Reviewers approving a PR are implicitly approving what will later be promoted to
+prod, so `infra-ci.yml` plans **prod as well as dev**. That creates a conflict:
+the `prod` environment carries a required reviewer, so a PR job declaring
+`environment: prod` would pause and wait for approval on every PR.
+
+The fix is a reviewer-free twin. `terraform.yml` accepts a `github-environment`
+input that decouples the *GitHub* Environment from the *Terraform* environment:
+
+```yaml
+plan-prod:
+    uses: ./.github/workflows/terraform.yml
+    with:
+        environment: prod # tfstate key + prod.tfvars
+        github-environment: prod-plan # identity + variables, no reviewer
+        apply: false
+        comment-on-pr: true
+```
+
+`infra-cd.yml` never passes `github-environment`, so the real applies keep
+running under `dev`/`prod` with the approval gate intact.
+
+> `prod-plan` reuses the deploy principal, so PR-time planning holds the same
+> Azure rights as an apply. A read-only plan principal is a sensible hardening
+> follow-up.
+
 ### Two environments: variables and secrets
 
-Each GitHub Environment (`dev`, `prod`) supplies its own configuration, so the
-same workflow targets different subscriptions/settings without code changes:
+Each GitHub Environment (`dev`, `prod`, and the plan-only `prod-plan`) supplies
+its own configuration, so the same workflow targets different
+subscriptions/settings without code changes:
 
 - **Variables** (non-secret IDs the workflow reads): `AZURE_CLIENT_ID`,
   `AZURE_CI_PRINCIPAL_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`,
@@ -199,7 +246,8 @@ overrides via environment variables:
 DRY_RUN=true ./infra/scripts/bootstrap-cicd-oidc.sh
 
 # Apply: create the Entra app + SP, add per-environment federated credentials,
-# grant RBAC, and create the dev/prod environments with prod requiring a review.
+# grant RBAC, and create the dev/prod/prod-plan environments with prod requiring
+# a review.
 ./infra/scripts/bootstrap-cicd-oidc.sh
 
 # Customize for another repo / reviewer / state account, e.g.:
@@ -223,8 +271,14 @@ environment secrets your stack needs afterward, and map them to `TF_VAR_*` in
 > Re-running is safe: existing apps, credentials, role assignments, and
 > environments are detected and left in place.
 
+> **Upgrading an existing repo:** `prod-plan` was added alongside the PR plan
+> comment. Re-run the script once to create the environment, its federated
+> credential, and its variables — until then `Plan (prod)` fails on missing
+> `vars.AZURE_CLIENT_ID` and blocks the `Infra CI` gate.
+
 ## Options
 
-- Suggested next customization: a companion gitops-delivery enhancement — a
-  reusable workflow that posts the `terraform plan` output as a sticky PR comment
-  so reviewers see the diff inline before approving the promotion to prod.
+- Suggested next customization: run [Checkov](https://www.checkov.io/) between
+  `validate` and `plan` in `terraform.yml` and surface its outcome as an extra
+  row in the plan comment's status table, so misconfigurations are caught before
+  a human reviews the diff.
