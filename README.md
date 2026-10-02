@@ -15,6 +15,22 @@ When building agentic applications, it is critical to maintain a product mindset
 - **Observability**: The system includes monitoring and logging capabilities to provide visibility into the deployment process and the state of the system.
 - **Extensibility**: The implementation is designed to be easily extended and customized to fit different use cases and environments.
 
+## Roadmap & Prioritization
+
+The Terminal Velocity project is structured around a 4-tier prioritization system with a clear critical path. See [PRIORITY_AND_IMPROVEMENTS.md](./PRIORITY_AND_IMPROVEMENTS.md) for:
+
+- **Current priorities**: 4-tier system (CRITICAL → HIGH → MEDIUM → LOW)
+- **Critical path**: Sequencing and dependencies for foundation work
+- **Effort estimates**: Planning horizon for team capacity
+- **Phased rollout**: When each tier becomes available
+
+**Current status**: Phase 1 (CRITICAL tier foundation) in progress
+- ✅ #58: Package skeleton (agents/tools base classes, templates, tests)
+- ⏳ #57: Expand pytest suite (integration tests, fixtures, edge cases)
+- ⏳ #59: Bandit security scanning (GitHub Actions gate)
+
+See the [GitHub project](https://github.com/skyarkitekten/terminal-velocity/issues) for all issues and their current status.
+
 ## Architecture
 
 ## Getting Started
