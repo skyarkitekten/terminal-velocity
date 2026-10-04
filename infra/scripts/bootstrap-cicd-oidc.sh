@@ -30,7 +30,7 @@
 #
 # Key environment variables (all optional unless noted):
 #   REPO                GitHub "owner/repo". Default: `gh repo view`.
-#   ENVIRONMENTS        Space-separated list. Default: "dev prod".
+#   ENVIRONMENTS        Space-separated list. Default: "dev prod prod-plan".
 #   APPROVAL_ENVS       Envs that require a reviewer. Default: "prod".
 #   PROD_REVIEWER       GitHub login to set as required reviewer on APPROVAL_ENVS.
 #                       Default: the authenticated gh user.
@@ -68,7 +68,7 @@ REPO="${REPO:-$(gh repo view --json nameWithOwner -q .nameWithOwner)}"
 SUBSCRIPTION_ID="${SUBSCRIPTION_ID:-$(az account show --query id -o tsv)}"
 TENANT_ID="${TENANT_ID:-$(az account show --query tenantId -o tsv)}"
 
-ENVIRONMENTS="${ENVIRONMENTS:-dev prod}"
+ENVIRONMENTS="${ENVIRONMENTS:-dev prod prod-plan}"
 APPROVAL_ENVS="${APPROVAL_ENVS:-prod}"
 PROD_REVIEWER="${PROD_REVIEWER:-$(gh api user -q .login)}"
 APP_NAME="${APP_NAME:-${REPO##*/}-cicd}"

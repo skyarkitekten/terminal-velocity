@@ -1,7 +1,7 @@
 name: Infra CI
 
-# Pull-request gate: format, validate, and plan the infra stack against dev.
-# Plan-only — never applies from a PR. The plan is the review artifact.
+# Pull-request gate: format, validate, and plan the infra stack against dev and prod.
+# Plan-only — never applies from a PR. Each environment's plan is the review artifact.
 #
 # The workflow runs on every PR so the required "Infra CI" check is always
 # reported (a path-filtered trigger would leave non-infra PRs stuck on
@@ -13,7 +13,6 @@ on:
     pull_request:
 
 permissions:
-    id-token: write
     contents: read
     pull-requests: read
 
@@ -42,10 +41,31 @@ jobs:
         name: Plan (dev)
         needs: changes
         if: ${{ needs.changes.outputs.infra == 'true' }}
+        permissions:
+            id-token: write
+            contents: read
+            pull-requests: write
         uses: ./.github/workflows/terraform.yml
         with:
             environment: dev
             apply: false
+            comment-on-pr: true
+        secrets: inherit
+
+    plan-prod:
+        name: Plan (prod)
+        needs: changes
+        if: ${{ needs.changes.outputs.infra == 'true' }}
+        permissions:
+            id-token: write
+            contents: read
+            pull-requests: write
+        uses: ./.github/workflows/terraform.yml
+        with:
+            environment: prod
+            github-environment: prod-plan
+            apply: false
+            comment-on-pr: true
         secrets: inherit
 
     # Aggregate gate that reports a stable "Infra CI" check-run context for branch
@@ -53,22 +73,24 @@ jobs:
     # to plan) and otherwise requires the plan to have succeeded.
     infra-ci:
         name: Infra CI
-        needs: [changes, plan-dev]
+        needs: [changes, plan-dev, plan-prod]
         if: ${{ always() }}
         runs-on: ubuntu-latest
         steps:
             - name: Verify plan gate
               run: |
                   changed="${{ needs.changes.outputs.infra }}"
-                  result="${{ needs.plan-dev.result }}"
+                  dev_result="${{ needs.plan-dev.result }}"
+                  prod_result="${{ needs.plan-prod.result }}"
                   echo "infra changed: $changed"
-                  echo "plan-dev result: $result"
+                  echo "plan-dev result: $dev_result"
+                  echo "plan-prod result: $prod_result"
                   if [ "$changed" != "true" ]; then
                       echo "No infra changes in this PR; Infra CI gate passes without planning."
                       exit 0
                   fi
-                  if [ "$result" != "success" ]; then
-                      echo "::error::Infra CI gate failed because plan-dev did not succeed (result: $result)."
+                  if [ "$dev_result" != "success" ] || [ "$prod_result" != "success" ]; then
+                      echo "::error::Infra CI gate failed because a Terraform plan did not succeed."
                       exit 1
                   fi
-                  echo "Infra changes planned successfully."
+                  echo "Infra changes planned successfully for dev and prod."

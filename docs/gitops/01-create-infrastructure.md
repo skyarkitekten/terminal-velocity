@@ -151,8 +151,8 @@ Three workflows under `.github/workflows/` implement a standard GitOps loop:
 
 | Workflow        | Trigger                    | Responsibility                                                                                                                                     |
 | --------------- | -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `terraform.yml` | `workflow_call` (reusable) | `fmt` → `init` → `validate` → `plan`, and a conditional `apply`. Runs in a GitHub Environment so its variables, secrets, and approval gates apply. |
-| `infra-ci.yml`  | PR touching `infra/**`     | Plan-only against **dev**. The plan is the review artifact — it never applies.                                                                     |
+| `terraform.yml` | `workflow_call` (reusable) | `fmt` → `init` → `validate` → `plan`, a conditional `apply`, and a sticky plan comment for opted-in PR plans. Its Terraform environment (state key and tfvars) can differ from its GitHub Environment. |
+| `infra-ci.yml`  | PR touching `infra/**`     | Plan-only against **dev and prod**. Each plan updates a sticky PR comment and job summary — plans never apply. |
 | `infra-cd.yml`  | Push to `main` / manual    | `deploy-dev` (apply) → `deploy-prod` (apply). `deploy-prod` `needs` dev and runs only after the prod environment's reviewer approves.              |
 
 Everything authenticates with **OIDC** — `azure/login` exchanges the workflow's
@@ -160,15 +160,19 @@ short-lived token for Azure credentials, and the `azurerm` backend reuses it
 (`ARM_USE_OIDC=true`). No client secrets or storage keys are ever stored.
 
 The reusable workflow is environment-parameterized, so the same code serves dev
-and prod; only the `environment` input (and its scoped variables/secrets)
-changes. The backend `key` is derived per environment
+and prod; the `environment` input selects its state key and tfvars. PR plans for
+prod set `github-environment: prod-plan` to use the prod Azure variables and OIDC
+trust without pausing at prod's required-reviewer gate. Only `environment` is
+used to derive the backend `key` per environment
 (`<env>/terminal-velocity.tfstate`), and an optional
 `infra/environments/<env>.tfvars` is applied when present.
 
-### Two environments: variables and secrets
+### Deployment environments and plan-only environment
 
-Each GitHub Environment (`dev`, `prod`) supplies its own configuration, so the
-same workflow targets different subscriptions/settings without code changes:
+The `dev` and `prod` GitHub Environments supply deployment configuration. The
+unprotected `prod-plan` environment has the prod variables for PR planning but
+no required reviewer; it is not an apply target. The same workflow targets
+different subscriptions/settings without code changes:
 
 - **Variables** (non-secret IDs the workflow reads): `AZURE_CLIENT_ID`,
   `AZURE_CI_PRINCIPAL_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`,
@@ -199,7 +203,7 @@ overrides via environment variables:
 DRY_RUN=true ./infra/scripts/bootstrap-cicd-oidc.sh
 
 # Apply: create the Entra app + SP, add per-environment federated credentials,
-# grant RBAC, and create the dev/prod environments with prod requiring a review.
+# grant RBAC, and create dev/prod/prod-plan (only prod requires a review).
 ./infra/scripts/bootstrap-cicd-oidc.sh
 
 # Customize for another repo / reviewer / state account, e.g.:
@@ -225,6 +229,8 @@ environment secrets your stack needs afterward, and map them to `TF_VAR_*` in
 
 ## Options
 
-- Suggested next customization: a companion gitops-delivery enhancement — a
-  reusable workflow that posts the `terraform plan` output as a sticky PR comment
-  so reviewers see the diff inline before approving the promotion to prod.
+- **Checkov (#46)** is the next customization: add its status row and details
+  block to the extensible PR plan report, then include it in the final check gate.
+- A read-only Azure identity dedicated to PR planning would reduce the rights
+  available to untrusted plan inputs; `prod-plan` currently reuses the deploy
+  identity and its Azure access.
