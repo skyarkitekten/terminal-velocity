@@ -10,11 +10,21 @@ on:
     workflow_call:
         inputs:
             environment:
-                description: Target GitHub Environment (also the tfstate key prefix).
+                description: Terraform environment (tfstate key prefix and tfvars).
                 required: true
+                type: string
+            github-environment:
+                description: GitHub Environment to use; defaults to the Terraform environment.
+                required: false
+                default: ""
                 type: string
             apply:
                 description: Apply the plan. When false, plan only (use for PRs).
+                required: false
+                default: false
+                type: boolean
+            comment-on-pr:
+                description: Update a sticky pull-request plan comment for same-repository PRs.
                 required: false
                 default: false
                 type: boolean
@@ -24,15 +34,11 @@ on:
                 default: "1.12.2"
                 type: string
 
-permissions:
-    id-token: write # required for OIDC federated login to Azure
-    contents: read
-
 jobs:
     terraform:
         name: terraform (${{ inputs.environment }})
         runs-on: ubuntu-latest
-        environment: ${{ inputs.environment }}
+        environment: ${{ inputs.github-environment || inputs.environment }}
         defaults:
             run:
                 working-directory: infra/stacks/platform
@@ -68,11 +74,15 @@ jobs:
                   terraform_version: ${{ inputs.terraform-version }}
 
             - name: Format check
+              id: fmt
+              continue-on-error: true
               # Cover the whole tree (modules + stacks), not just this stack.
               working-directory: infra
               run: terraform fmt -check -recursive
 
             - name: Init
+              id: init
+              continue-on-error: true
               run: |
                   terraform init -input=false \
                     -backend-config="resource_group_name=${{ vars.TFSTATE_RESOURCE_GROUP }}" \
@@ -97,6 +107,8 @@ jobs:
               run: cp "${{ steps.vars.outputs.file }}" terraform.tfvars
 
             - name: Validate
+              id: validate
+              continue-on-error: true
               run: terraform validate
 
             - name: Clean staged validate inputs
@@ -104,8 +116,118 @@ jobs:
               run: rm -f terraform.tfvars
 
             - name: Plan
-              run: terraform plan -input=false -out=tfplan ${{ steps.vars.outputs.arg }}
+              id: plan
+              continue-on-error: true
+              run: terraform plan -no-color -input=false -out=tfplan ${{ steps.vars.outputs.arg }} 2>&1 | tee "$RUNNER_TEMP/terraform-plan.log"
 
             - name: Apply
-              if: ${{ inputs.apply }}
+              if: ${{ inputs.apply && steps.fmt.outcome == 'success' && steps.init.outcome == 'success' && steps.validate.outcome == 'success' && steps.plan.outcome == 'success' }}
               run: terraform apply -input=false tfplan
+
+            - name: Render plan report
+              id: report
+              if: ${{ always() }}
+              run: |
+                  report_dir="$RUNNER_TEMP/terraform-plan-report"
+                  mkdir -p "$report_dir"
+                  plan_log="$RUNNER_TEMP/terraform-plan.log"
+                  plan_text="$report_dir/plan.txt"
+                  changes="unavailable"
+
+                  if [ -f tfplan ]; then
+                    if terraform show -no-color tfplan > "$plan_text" 2>"$report_dir/show-error.txt"; then
+                      :
+                    else
+                      if [ -f "$plan_log" ]; then
+                        cp "$plan_log" "$plan_text"
+                      else
+                        : > "$plan_text"
+                      fi
+                      printf '\nterraform show failed:\n' >> "$plan_text"
+                      cat "$report_dir/show-error.txt" >> "$plan_text"
+                    fi
+
+                    plan_json="$RUNNER_TEMP/terraform-plan.json"
+                    if terraform show -json tfplan > "$plan_json"; then
+                      if parsed_changes="$(jq -r '
+                        reduce (.resource_changes[]? | select(.mode == "managed") | .change.actions) as $actions
+                          ({add: 0, change: 0, destroy: 0, replace: 0};
+                           if (($actions | index("create")) and ($actions | index("delete"))) then .replace += 1
+                           elif ($actions | index("create")) then .add += 1
+                           elif ($actions | index("update")) then .change += 1
+                           elif ($actions | index("delete")) then .destroy += 1
+                           else . end)
+                        | "+\(.add) ~\(.change) -\(.destroy) ±\(.replace)"
+                      ' "$plan_json" 2>/dev/null)"; then
+                        changes="$parsed_changes"
+                      fi
+                      rm -f "$plan_json"
+                    else
+                      rm -f "$plan_json"
+                    fi
+                  elif [ -f "$plan_log" ]; then
+                    cp "$plan_log" "$plan_text"
+                  else
+                    printf 'Terraform plan did not run; see the check statuses above.\n' > "$plan_text"
+                  fi
+
+                  python3 "$GITHUB_WORKSPACE/infra/scripts/render_terraform_plan.py" \
+                    --environment "${{ inputs.environment }}" \
+                    --fmt-status "${{ steps.fmt.outcome }}" \
+                    --init-status "${{ steps.init.outcome }}" \
+                    --validate-status "${{ steps.validate.outcome }}" \
+                    --plan-status "${{ steps.plan.outcome }}" \
+                    --changes "$changes" \
+                    --plan-file "$plan_text" \
+                    --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+                    --output-file "$report_dir/comment.md"
+                  cat "$report_dir/comment.md" >> "$GITHUB_STEP_SUMMARY"
+                  echo "body-file=$report_dir/comment.md" >> "$GITHUB_OUTPUT"
+
+            # Reserved insertion point for Checkov (#46): add its status above,
+            # then include its result in the table and details block.
+            - name: Update sticky PR plan comment
+              if: ${{ always() && inputs.comment-on-pr && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
+              env:
+                  GH_TOKEN: ${{ github.token }}
+                  PR_NUMBER: ${{ github.event.pull_request.number }}
+                  ENVIRONMENT: ${{ inputs.environment }}
+                  COMMENT_FILE: ${{ steps.report.outputs.body-file }}
+              run: |
+                  marker="<!-- terraform-plan: ${ENVIRONMENT} -->"
+                  comment_id="$(gh api --paginate \
+                    "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments?per_page=100" \
+                    | jq -s -r --arg marker "$marker" \
+                      '[.[][]? | select(.user.login == "github-actions[bot]" and (.body | contains($marker)))][-1].id // empty')"
+                  payload="$(jq -n --rawfile body "$COMMENT_FILE" '{body: $body}')"
+                  if [ -n "$comment_id" ]; then
+                    printf '%s' "$payload" | gh api --method PATCH \
+                      "repos/${GITHUB_REPOSITORY}/issues/comments/${comment_id}" --input -
+                  else
+                    printf '%s' "$payload" | gh api --method POST \
+                      "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" --input -
+                  fi
+
+            - name: Skip PR comment for forks
+              if: ${{ always() && inputs.comment-on-pr && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
+              run: echo "Skipping plan comment because the PR comes from a fork."
+
+            - name: Verify checks
+              if: ${{ always() }}
+              env:
+                  FMT_RESULT: ${{ steps.fmt.outcome }}
+                  INIT_RESULT: ${{ steps.init.outcome }}
+                  VALIDATE_RESULT: ${{ steps.validate.outcome }}
+                  PLAN_RESULT: ${{ steps.plan.outcome }}
+              run: |
+                  failed=0
+                  for result in "$FMT_RESULT" "$INIT_RESULT" "$VALIDATE_RESULT" "$PLAN_RESULT"; do
+                    echo "check result: $result"
+                    if [ "$result" != "success" ]; then
+                      failed=1
+                    fi
+                  done
+                  if [ "$failed" -ne 0 ]; then
+                    echo "::error::One or more Terraform checks failed or were skipped."
+                    exit 1
+                  fi

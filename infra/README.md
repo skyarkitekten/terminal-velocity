@@ -105,9 +105,14 @@ from `infra/stacks/platform`:
   committed.
 - **Inputs** — `terraform.yml` resolves `environments/<environment>.tfvars`.
   Subscription/tenant come from Actions _variables_ via `TF_VAR_*`/`ARM_*`.
-- **Promotion** — [`infra-ci.yml`](../.github/workflows/infra-ci.yml) plans on PRs
-  (never applies); [`infra-cd.yml`](../.github/workflows/infra-cd.yml) applies to
-  `dev` then `prod` (prod gated by required reviewers) on merge to `main`.
+- **Review** — [`infra-ci.yml`](../.github/workflows/infra-ci.yml) plans both
+  `dev` and `prod` on PRs (never applies) and updates one sticky plan comment per
+  environment. The prod plan uses the unprotected `prod-plan` GitHub Environment
+  to avoid waiting for prod's apply approval; it uses the same Azure identity and
+  settings as `prod`.
+- **Promotion** — [`infra-cd.yml`](../.github/workflows/infra-cd.yml) applies to
+  `dev` then `prod` on merge to `main`; prod remains gated by required reviewers.
+  The `prod-plan` environment is only for PR-time plans and is never used to apply.
 
 ## Local validation
 
@@ -122,4 +127,3 @@ Use the repo's read-only helper (never applies):
 `validate` needs nothing but `terraform`. `plan` needs `az login` to the
 correct tenant/subscription and `gh` (to read backend coordinates from
 Actions variables), and never writes a plan file that could be applied.
-
